@@ -6,6 +6,7 @@ import { UserDocument, User as UserModel } from './schemas/user.schema';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { EmailService } from 'src/email/email.service';
+import { Twilio } from 'twilio';
 import twilio from 'twilio';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
@@ -132,42 +133,53 @@ export class UserService implements UserServiceInterface {
         return this.mapToUserInterface(userDoc.toObject());
     }
 
-    async login(loginDto: LoginDto): Promise<{message: string}> {
+    async login(loginDto: LoginDto): Promise<{ message: string }> {
         const { email, password } = loginDto;
         const userDoc = await this.userModel.findOne({ email }).exec();
         if (!userDoc) {
-            throw new UnauthorizedException('Credenciales inválidas');
+          throw new UnauthorizedException('Credenciales inválidas');
         }
-
-        if(!userDoc.isVerified){
-            throw new UnauthorizedException('La cuenta no ha sido verificada');
+      
+        if (!userDoc.isVerified) {
+          throw new UnauthorizedException('La cuenta no ha sido verificada');
         }
-
+      
         const isValidPassword = await bcrypt.compare(password, userDoc.password);
         if (!isValidPassword) {
-            throw new UnauthorizedException('Credenciales inválidas');
+          throw new UnauthorizedException('Credenciales inválidas');
         }
-
+      
         const loginCode = Math.floor(100000 + Math.random() * 900000).toString();
         const loginCodeExpires = new Date();
         loginCodeExpires.setMinutes(loginCodeExpires.getMinutes() + 2);
-
+      
         userDoc.loginCode = loginCode;
         userDoc.loginCodeExpires = loginCodeExpires;
+      
+        // Await the saving of the updated document
+        await userDoc.save();
 
-        userDoc.save();
-
-        const client = twilio(this.configService.get<string>('TWILIO_ACCOUNT_SID'), this.configService.get<string>('TWILIO_AUTH_TOKEN'));
-
-        client.messages.create({
+        const client = new Twilio(
+          this.configService.get<string>('TWILIO_ACCOUNT_SID'),
+          this.configService.get<string>('TWILIO_AUTH_TOKEN')
+        );
+      
+        // Wrap the message sending in a try/catch for better error handling
+        try {
+          await client.messages.create({
             body: `Tu código de inicio de sesión es: ${loginCode}`,
             from: this.configService.get<string>('TWILIO_PHONE_NUMBER'),
             to: userDoc.phoneNumber,
-        })
-
-
-        return {message: 'Verifica el codigo que llego a tu telefono'};
-    }
+          });
+        } catch (error) {
+          // Log the error details as needed (or use a dedicated logger)
+          console.error('Error sending SMS via Twilio:', error);
+          throw new BadRequestException('Error enviando el código de verificación');
+        }
+      
+        return { message: 'Verifica el código que llegó a tu teléfono' };
+      }
+      
 
     async verifyLoginCode(verifyLoginCode: VerifyLoginCodeDto): Promise<{message: string, accessToken: string, refreshToken: string}> {
         const { email, code } = verifyLoginCode;

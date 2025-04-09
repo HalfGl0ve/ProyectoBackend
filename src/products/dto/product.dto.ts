@@ -17,6 +17,10 @@ export class CreateProductDto{
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
+
+    @IsNotEmpty()
+    @IsString()
+    category: string;
 }
 
 export class UpdateProductDto{

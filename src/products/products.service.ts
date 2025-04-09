@@ -2,34 +2,48 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Product, ProductDocument } from './schema/product.schema';
+import { Product as ProductModel, ProductDocument } from './schema/product.schema';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import { ProductServiceInterface, Product } from './interfaces/product.interface';
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements ProductServiceInterface {
     constructor(
-        @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+        @InjectModel(ProductModel.name) private productModel: Model<ProductDocument>,
     ) {}
+    async findByName(name: string): Promise<Product> {
+        const product = await this.productModel.findOne({ name }).lean().exec();
+
+        if (!product) {
+            throw new NotFoundException(`Product with name ${name} not found`);
+        }
+        return this.mapToProductInterface(product);
+    }
 
     async findAll(userId?: string): Promise<Product[]> {
         const query = userId ? { createdBy: userId } : {};
-        return this.productModel.find(query).exec();
+        const products = await this.productModel.find(query).lean().exec();
+
+        return products.map(product => this.mapToProductInterface(product));
     }
 
     async findById(id: string): Promise<Product> {
-        const product = await this.productModel.findById(id).exec();
+        const product = await this.productModel.findById(id).lean().exec();
         if (!product) {
             throw new NotFoundException(`Product with ID ${id} not found`);
         }
-        return product;
+        return this.mapToProductInterface(product);
     }
 
     async create(createProductDto: CreateProductDto, userId: string): Promise<Product> {
         const newProduct = new this.productModel({
         ...createProductDto,
         createdBy: userId,
+        category: createProductDto.category,
         });
-        return newProduct.save();
+
+        newProduct.save();
+        return this.mapToProductInterface(newProduct.toObject());
     }
 
     async update(id: string, updateProductDto: UpdateProductDto): Promise<Product> {
@@ -39,7 +53,7 @@ export class ProductsService {
         if (!updatedProduct) {
             throw new NotFoundException(`Product with ID ${id} not found`);
         }
-        return updatedProduct;
+        return this.mapToProductInterface(updatedProduct);
     }
 
     async delete(id: string): Promise<boolean> {
@@ -48,5 +62,18 @@ export class ProductsService {
             throw new NotFoundException(`Product with ID ${id} not found`);
         }
         return true;
+    }
+
+    private mapToProductInterface(product: any): Product {
+        return {
+            id: product._id.toString(),
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            isActive: product.isActive,
+            createdAt: product.createdAt,
+            updatedAt: product.updatedAt,
+        };
+    
     }
 }

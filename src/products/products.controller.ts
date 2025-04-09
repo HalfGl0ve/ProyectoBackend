@@ -12,16 +12,16 @@ import {
     } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
-import { RolesGuard } from '../users/guards/roles.guard';
 import { Roles } from '../users/decorators/roles.decorator';
 import { Public } from '../users/decorators/public.decorator';
+import { CheckPolicies } from 'src/users/decorators/check-policies.decorator';
+import { Action } from 'src/abilities/ability.factory';
 
 
 @Controller('products')
 export class ProductsController {
     constructor(private readonly productsService: ProductsService) {}
 
-    // Ruta pública utilizando el decorador Public
     @Public()
     @Get()
     findAll() {
@@ -35,11 +35,13 @@ export class ProductsController {
     }
 
     // Ruta protegida por defecto
+    @CheckPolicies({ action: Action.Create, subject: 'Product' })
     @Post()
     create(@Body() createProductDto: CreateProductDto, @Request() req) {
         return this.productsService.create(createProductDto, req.user.id);
     }
 
+    @CheckPolicies({ action: Action.Update, subject: 'Product' })
     @Put(':id')
     async update(
         @Param('id') id: string,
@@ -47,32 +49,15 @@ export class ProductsController {
         @Request() req,
     ) {
         const product = await this.productsService.findById(id);
-        if (product.createdBy && product.createdBy.toString() !== req.user.id) {
-            throw new UnauthorizedException('You can only update your own products');
-        }
+        
         return this.productsService.update(id, updateProductDto);
     }
 
+    @CheckPolicies({ action: Action.Delete, subject: 'Product' })
     @Delete(':id')
     async delete(@Param('id') id: string, @Request() req) {
         const product = await this.productsService.findById(id);
-        if (
-            product.createdBy &&
-            product.createdBy.toString() !== req.user.id &&
-            req.user.role !== 'admin'
-        ) {
-            throw new UnauthorizedException(
-            'You can only delete your own products',
-            );
-        }
+        
         return this.productsService.delete(id);
-    }
-
-    // Ruta protegida solo para roles específicos
-    @UseGuards(RolesGuard) 
-    @Roles('admin')
-    @Get('admin/all')
-    findAllAdmin() {
-        return this.productsService.findAll();
     }
 }

@@ -9,7 +9,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { EmailModule } from '../email/email.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { RolesGuard } from './guards/roles.guard';
 import { EmailService } from 'src/email/email.service';
 
 @Module({
@@ -29,7 +28,7 @@ import { EmailService } from 'src/email/email.service';
     EmailModule,
   ],
   controllers: [UserController],
-  providers: [UserService, JwtStrategy, JwtAuthGuard, RolesGuard, EmailService],
-  exports: [JwtStrategy, JwtAuthGuard, RolesGuard,UserService],
+  providers: [UserService, JwtStrategy, JwtAuthGuard, EmailService],
+  exports: [JwtStrategy, JwtAuthGuard, UserService],
 })
 export class UserModule {}
